@@ -13,7 +13,9 @@ use Illuminate\Http\Request;
 |
 */
 
+Route::get('test','SyncController@test');
 Route::get('pull/{id}','SyncController@pull');
+Route::post('push/{id}','SyncController@push');
 
 Route::middleware('auth:api')->get('/user', function (Request $request) {
     return $request->user();
