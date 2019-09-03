@@ -10,12 +10,19 @@ use App\DonorFinal;
 
 class SyncController extends Controller
 {
-    function pull($id){
+
+    private function getLength(){
         $q = DB::select("select count(*) as cnt from donor1");
         $count = $q[0]->cnt;
         
         $length = round($count/7);
-        // $length = 100;
+        // return 100;
+        return $length;
+    }
+    
+    function pull($id){
+        $length = $this->getLength();
+
         $start = $id * $length;
 
         $donors = DonorLeft::with('right')->orderBy('seqno','asc')->skip($start)->take($length)->get()->toArray();
@@ -94,7 +101,11 @@ class SyncController extends Controller
             $d->created_dt = isset($r['created_dt']) ? $r['created_dt'] : null;
             $d->updated_by = isset($r['updated_by']) ? $r['updated_by'] : null;
             $d->updated_dt = isset($r['updated_dt']) ? $r['updated_dt'] : null;
-            $d->save();
+            try{
+                $d->save();
+            }catch(Exception $e){
+                report($e);
+            }
             unset($r);
         }
 
@@ -168,4 +179,82 @@ class SyncController extends Controller
         }
         return null;
     }
+
+    function stats($id){
+        $q = DB::select("select count(*) as cnt from donor1");
+        $count = $q[0]->cnt;
+        
+        $length = $this->getLength();
+        $start = $id * $length;
+
+        $donors = DonorLeft::with('right')->orderBy('seqno','asc')->skip($start)->take($length)->get()->toArray();
+        if(count($donors) == 0){
+            return [
+                'total' => 0, 'done' => 0, 'begin' => 0, 'last' => 0
+            ];
+        }
+        $begining_seqno = $donors[0]['seqno'];
+        $last_seqno = $donors[count($donors)-1]['seqno'];
+
+        return [
+            'total' => count($donors), 
+            'done' => DonorFinal::whereBetween('seqno',[$begining_seqno,$last_seqno])->orderBy('seqno','asc')->get()->count(),
+            'begin' => $begining_seqno,
+            'last' => $last_seqno,
+        ];
+    }
+
+    function review($id){
+        $q = DB::select("select count(*) as cnt from donor1");
+        $count = $q[0]->cnt;
+        
+        $length = $this->getLength();
+        $start = $id * $length;
+
+        $donors = DonorLeft::with('right')->orderBy('seqno','asc')->skip($start)->take($length)->get()->toArray();
+        if(count($donors) == 0){
+            return [
+                'total' => 0, 'done' => 0, 'begin' => 0, 'last' => 0
+            ];
+        }
+        $begining_seqno = $donors[0]['seqno'];
+        $last_seqno = $donors[count($donors)-1]['seqno'];
+        
+        
+        $donors = DonorFinal::with('left','right')->whereBetween('seqno',[$begining_seqno,$last_seqno])->orderBy('seqno','asc')->take(100)->get();
+        $data = [];
+        foreach($donors as $i => $final){
+            
+            // $left = DonorLeft::whereSeqno($final['seqno'])->first();
+            // $right = DonorRight::whereSeqno($final['seqno'])->first();
+            $left = $final->left;
+            $right = $final->right;
+            
+            if($final->donor_photo != null){
+                $final->donor_photo = $this->photo($final->seqno);
+            }
+
+            if($left->donor_photo != null){
+                $left->donor_photo = $this->photo($final->seqno);
+            }
+
+            if($right->donor_photo != null){
+                $right->donor_photo = $this->photo($final->seqno);
+            }
+            unset($final->left);
+            unset($final->right);
+            $data[$i] = [
+                'final' => $final,
+                'left' => $left,
+                'right' => $right,
+            ];
+        }
+
+        // dd($x);
+
+        // $data = $this->utf8ize($data);
+        return ['data' => $data];
+    }
+
+    
 }
